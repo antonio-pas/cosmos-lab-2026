@@ -14,16 +14,22 @@ from cosmos import *
 from digicomm import *
 from detection_skeleton import pam_detect
 from common import *
+from reedsolo import ReedSolomonError
 
 sdr_rx = adi.Pluto("usb:1.1.5")
 rx = PlutoReceiver()
 rx.set_sdr(sdr_rx)
-rx.set_buffer_size(1e6)
+rx.set_buffer_size(2e6)
 rx.set_channel(1)
 rx.set_gain_level(80)
 rx.desired_transmit_symbols_real = True
+
+image_bytes = frames_per_transmission * 3 * width * height
+# encoded_bytes = len(rsc.encode(bytes(image_bytes)))
+
 bits_per_symbol = int(np.log2(M))
-rx.num_transmit_symbols = frames_per_transmission * 3 * width * height * 8 // bits_per_symbol
+num_symbols = image_bytes * 8 // bits_per_symbol
+rx.num_transmit_symbols = num_symbols
 
 should_stop_event = threading.Event()
 image_queue = queue.Queue()
@@ -48,8 +54,15 @@ def recieve_worker():
             rx_symbols = rx.receive()
             detected_symbols = pam_detect(rx_symbols, M)
             bits = pam_symbols_to_bits(detected_symbols, M)
-            bytes = bits_to_bytes(bits)
-            array = np.frombuffer(bytes, dtype=np.uint8)
+            payload = bits_to_bytes(bits)
+            # try:
+            #     decoded_payload = bytes(rsc.decode(payload)[0])
+            #     array = np.frombuffer(decoded_payload, dtype=np.uint8)
+            # except ReedSolomonError:
+            #     print("corrupted frame, skipping")
+            #     continue
+            array = np.frombuffer(payload, dtype=np.uint8)
+
             #
             later = time.perf_counter()
             time_elapsed = later - now
@@ -64,7 +77,6 @@ def recieve_worker():
                 push_image(image)
         except Exception as error:
             print("Error during image reception:", error)
-
 
 plt.ion()
 
@@ -87,7 +99,6 @@ while plt.fignum_exists(figure.number):
     except queue.Empty:
         plt.pause(0.01)
         continue
-
     # print("sleeping for", avg_transmission_time(), "/", qs, "seconds: ", avg_transmission_time() / qs)
     image_plot.set_data(image)
     figure.canvas.draw_idle()

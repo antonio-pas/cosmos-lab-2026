@@ -37,29 +37,27 @@ tx.set_power_level(100)
 # ---------------------------------------------------------------
 # Transmit.
 # ---------------------------------------------------------------
-number = 0
 accumulated_frames = []
 
 for frame in iio.imiter('<video0>'):
-    number += 1
     new_image = Image.fromarray(frame).resize((width,height))
     values = np.asarray(new_image, dtype=np.uint8)
     print("accumulating an image..")
     accumulated_frames.append(values)
     if (len(accumulated_frames) < frames_per_transmission):
-        time.sleep(seconds_per_frame) # TODO: change this
+        time.sleep(seconds_per_frame)
         continue
 
     tx_values = np.array(accumulated_frames)
-    # print(values)
-    print(tx_values.shape)
-    bytes = tx_values.tobytes()
-    print("transmitting n bytes:", len(bytes))
-    bits = bytes_to_bits(bytes)
+    payload = tx_values.tobytes()
+    # encoded_payload = bytes(rsc.encode(payload))
+    # bits = bytes_to_bits(encoded_payload)
+    bits = bytes_to_bits(payload)
+
     tx_symbols = np.real(bits_to_pam_symbols(bits, M))
-    print(len(tx_symbols), "symbols")
+    # print("transmitting", len(encoded_payload), "bytes, ", len(tx_symbols), "symbols")
+    print("transmitting", len(payload), "bytes, ", len(tx_symbols), "symbols")
     tx.stop_transmission()
     tx.transmit(tx_symbols)
-    # print("transmitting frame", number, "...")
     accumulated_frames.clear()
     time.sleep(seconds_per_frame)
