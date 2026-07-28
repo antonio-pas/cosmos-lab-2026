@@ -20,12 +20,12 @@ class PlutoTransmitter:
         self.num_ltf_repeat = 2
         self.num_ltf_symbols_per_sequence = 937
         self.ltf_root = 11
-        self.num_stf_ltf_zero_symbols = 100 # between STF and LTF
+        self.num_stf_ltf_zero_symbols = 40 # between STF and LTF
 
         self.pilot_modulation_order = 4
-        self.num_pilot_symbols = 100
+        self.num_pilot_symbols = 40
         self.pilot_rng_seed = 416
-        self.num_zero_pad_symbols = 100 # between LTF and pilots
+        self.num_zero_pad_symbols = 40 # between LTF and pilots
 
         self.sps = 10
         self.pulse_shape_beta = 1
@@ -199,12 +199,12 @@ class PlutoReceiver:
         self.num_ltf_repeat = 2
         self.num_ltf_symbols_per_sequence = 937
         self.ltf_root = 11
-        self.num_stf_ltf_zero_symbols = 100 # between STF and LTF
+        self.num_stf_ltf_zero_symbols = 40 # between STF and LTF
 
         self.pilot_modulation_order = 4
-        self.num_pilot_symbols = 100
+        self.num_pilot_symbols = 40
         self.pilot_rng_seed = 416
-        self.num_zero_pad_symbols = 100 # between LTF and pilots
+        self.num_zero_pad_symbols = 40 # between LTF and pilots
 
         self.sps = 10
         self.pulse_shape_beta = 1
