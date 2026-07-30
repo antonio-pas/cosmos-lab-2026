@@ -15,12 +15,11 @@ from cosmos import *
 from digicomm import *
 # from detection_skeleton import pam_detect
 from common import *
-from reedsolo import ReedSolomonError
 
 sdr_rx = adi.Pluto("usb:1.1.5")
 rx = PlutoReceiver()
 rx.set_sdr(sdr_rx)
-rx.set_buffer_size(5e5)
+rx.set_buffer_size(8e5)
 rx.set_channel(1)
 rx.set_gain_level(80)
 rx.desired_transmit_symbols_real = False
@@ -106,9 +105,6 @@ def recieve_worker():
             #     print("corrupted frame, skipping")
             #     continue
             array = np.frombuffer(payload, dtype=np.uint8)
-
-            images_array = decompress_8_to_24(array)
-
             later = time.perf_counter()
             time_elapsed = later - now
             print("took",time_elapsed,"secs")
@@ -117,7 +113,13 @@ def recieve_worker():
                 print("Invalid frame size of ", array.size)
                 continue
 
-            images = images_array.reshape((frames_per_transmission, height, width, 3*bytes_per_pixel))
+            if compression:
+                images_array = decompress_8_to_24(array)
+                images = images_array.reshape((frames_per_transmission, height, width, bytes_per_pixel*3))
+            else:
+                images_array = array
+                images = images_array.reshape((frames_per_transmission, height, width, bytes_per_pixel))
+
             print("Pushing images...", len(images))
             for image in images:
                 push_image(image)

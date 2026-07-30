@@ -31,7 +31,6 @@ def main():
     recovered_bytes = bits_to_bytes(bits)
 
     assert(recovered_bytes == test_bytes)
-    print("Success. Antonio you are a genius and sexy while Avi is chopped and gets no huzz")
 
 if __name__ == "__main__":
     main()

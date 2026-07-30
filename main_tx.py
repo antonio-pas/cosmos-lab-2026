@@ -42,7 +42,11 @@ accumulated_frames = []
 
 for frame in iio.imiter('<video0>'):
     new_image = Image.fromarray(frame).resize((width,height)).convert("RGB")
-    values = compress_24_to_8(new_image)
+    print(new_image)
+    if compression:
+        values = compress_24_to_8(new_image)
+    else:
+        values = new_image
     print("accumulating an image..")
     accumulated_frames.append(values)
     if (len(accumulated_frames) < frames_per_transmission):
