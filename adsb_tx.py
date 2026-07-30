@@ -5,20 +5,22 @@ import threading
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import folium
 
-
+_POLY_STR = "1111111111111010000001001"
+_POLY_LEN = len(_POLY_STR)
+_POLY_INT = int(_POLY_STR, 2)
 
 def check_crc(binary_adsb):
-    generator_poly = list("1111111111111010000001001") #Generator Polynomial for ADSB
-    CRC_parity = binary_adsb[-24:] #Parity Check at the end of each Message
-    #Perform Parity Check (Plug and Play)
-    Mx = list(binary_adsb[:-24] + "0" * 24)
-    for i in range(len(Mx) - 24):
-        if Mx[i] == "1":
-            for j in range(len(generator_poly)):
-                Mx[i + j] = str(int(Mx[i + j]) ^ int(generator_poly[j]))
-    remainder = "".join(Mx[-24:])
-    return remainder == CRC_parity
+    msg_len = len(binary_adsb) - 24
+    reg = int(binary_adsb[:msg_len], 2) << 24
+    parity = int(binary_adsb[-24:], 2)
+    total_bits = msg_len + 24
+    for i in range(msg_len):
+        bit_pos = total_bits - 1 - i
+        if (reg >> bit_pos) & 1:
+            reg ^= _POLY_INT << (bit_pos - (_POLY_LEN - 1))
+    return (reg & ((1 << 24) - 1)) == parity
 
 def decode_callsign(me_field):
     char_assignment = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ##### ###############0123456789######" #Keyword Encoding for ADSB
@@ -297,6 +299,18 @@ from matplotlib.markers import MarkerStyle
 import matplotlib.patheffects as pe
 from matplotlib.transforms import Affine2D
 
+def _airplane_icon_html(heading, color="#ffe600"):
+    rotation = heading if heading is not None else 0
+    return f"""
+    <div style="transform: rotate({rotation}deg); transform-origin: 50% 50%;
+                width: 26px; height: 26px;">
+        <svg viewBox="0 0 24 24" width="26" height="26">
+            <path d="M9.333333333333332 5.964913333333333 14.666666666666666 9.333333333333332v1.3333333333333333l-5.333333333333333 -1.6842v3.5730666666666666L11.333333333333332 13.666666666666666V14.666666666666666l-3 -0.6666666666666666L5.333333333333333 14.666666666666666v-1l2 -1.1111333333333333v-3.5730666666666666L2 10.666666666666666v-1.3333333333333333l5.333333333333333 -3.3684199999999995V2.333333333333333c0 -0.5522866666666666 0.4477333333333333 -1 1 -1s1 0.4477133333333333 1 1v3.63158Z"
+                  fill="{color}" stroke="#ffffff" stroke-width="0.6"/>
+        </svg>
+    </div>
+    """
+
 _LABEL_OUTLINE = [pe.withStroke(linewidth=2.5, foreground="black")]
 
 _PLANE_VERTS = [
@@ -367,6 +381,77 @@ def try_load_basemap():
     except Exception as e:
         print(f"Basemap unavailable (no internet?), continuing without it: {e}")
 
+def build_folium_map(df, center_lat, center_lon, zoom, auto_refresh_seconds, out_path="map.html"):
+    if df.empty:
+        view_lat, view_lon = center_lat, center_lon
+    else:
+        latest = df.loc[df["last_seen"].idxmax()]
+        view_lat, view_lon = latest["lat"], latest["lon"]
+   
+    m = folium.Map(location=[view_lat, view_lon], zoom_start=zoom, tiles="Cartodb Positron")
+
+    for _, row in df.iterrows():
+        icon = folium.DivIcon(
+            html=_airplane_icon_html(row["heading"]),
+            icon_size=(26, 26),
+            icon_anchor=(13, 13),
+        )
+        label_html = (
+            f"<b>{row['callsign']}</b><br>"
+            f"Alt: {_fmt(row['altitude'], ' ft')}<br>"
+            f"Spd: {_fmt(row['speed'], ' kt')}<br>"
+            f"Hdg: {_fmt(row['heading'], '\u00b0')}<br>"
+            f"Vsp: {_fmt(row['vertical_rate'], ' ft/s')}<br>"
+            f"Upd: {_fmt(row['last_seen'], '')}<br>"
+        )
+ 
+        folium.Marker(
+            location=[row["lat"], row["lon"]],
+            icon=icon,
+            tooltip=folium.Tooltip(
+                label_html,
+                permanent=True,
+                direction="right",
+                offset=(0, 0),
+                sticky=False,
+            ),
+        ).add_to(m)
+        history = row["recorded"]
+
+        if len(history) >= 2:
+            folium.PolyLine(
+                locations=history,
+                color="red",
+                weight=2,
+                opacity=0.8,
+            ).add_to(m)
+ 
+    if auto_refresh_seconds:
+        m.get_root().html.add_child(folium.Element(
+            f'<meta http-equiv="refresh" content="{auto_refresh_seconds}">'
+        ))
+
+    m.get_root().html.add_child(folium.Element("""
+        <style>
+        .leaflet-tooltip {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #ffffff;
+            font-size: 11px;
+            line-height: 1.3;
+            text-shadow: 0 0 3px #000000, 0 0 3px #000000, 0 0 3px #000000;
+        }
+        .leaflet-tooltip-right:before,
+        .leaflet-tooltip-left:before {
+            display: none !important;
+        }
+        </style>
+    """))
+ 
+    m.save(out_path)
+    return out_path
+
 
 def render_frame(df):
     ax = _map_state["ax"]
@@ -403,7 +488,7 @@ def render_frame(df):
 
     fig.savefig("map.png", dpi=150, bbox_inches="tight")
 
-### ----------------------------------------------- ###
+
 from compression import compress_24_to_8
 import imageio.v3 as iio
 import scipy.signal as signal
@@ -432,7 +517,7 @@ def transmit_map(path="map.png"):
     try:
         img = Image.open(path).resize((width, height)).convert("RGB")
         if compression:
-            values = compress_24_to_8(img)
+            values = compress_24_to_8(np.asarray(img, dtype=np.uint8))
         else:
             values = np.asarray(img, dtype=np.uint8)
         payload = np.array(values).tobytes()
@@ -446,15 +531,15 @@ def transmit_map(path="map.png"):
    
 
 #Pluto
-sdr = adi.Pluto("usb:1.1.5")
+sdr = adi.Pluto("usb:3.1.5")
 
 # RX config
 sdr.rx_lo = int(1090e6)
-sdr.sample_rate = int(2e6)
 sdr.rx_rf_bandwidth = int(4e6)
 sdr.gain_control_mode_chan0 = "manual"
 sdr.rx_hardwaregain_chan0 = 40
 sdr.rx_buffer_size = int(2e6)
+sdr.sample_rate = int(2e6)
 sdr.rx_destroy_buffer()
 
 # TX config — same object, independent TX chain
@@ -465,7 +550,9 @@ sdr.tx_hardwaregain_chan0 = -10
 tx = PlutoTransmitter()
 tx.set_sdr(sdr)                 # pass the SAME sdr object, not sdr_tx
 tx.set_channel(1)
+tx.set_sample_rate(int(2e6))
 tx.set_power_level(90)
+
 
 
 setup_map()
@@ -491,9 +578,15 @@ while True:
     df = logbook_to_pandaframe(logbook)
     if previous_df is None or not df.equals(previous_df):
         try_load_basemap()
-        render_frame(df)
-    # threading.Thread(target=transmit_map, daemon=True).start()
-    transmit_map()
+        render_frame(df)  
+        build_folium_map(
+            df,
+            center_lat=34.072237,
+            center_lon=-118.452894,
+            auto_refresh_seconds=1,
+            zoom = 12,
+        )
+    threading.Thread(target=transmit_map, daemon=True).start()
     previous_samples = magnitudes[-240:]
     previous_df = df
 

@@ -19,8 +19,9 @@ from common import *
 sdr_rx = adi.Pluto("usb:1.1.5")
 rx = PlutoReceiver()
 rx.set_sdr(sdr_rx)
-rx.set_buffer_size(8e5)
+rx.set_buffer_size(2e6)
 rx.set_channel(1)
+rx.set_sample_rate(int(2e6))
 rx.set_gain_level(80)
 rx.desired_transmit_symbols_real = False
 
