@@ -1,3 +1,4 @@
+import os
 from compression import decompress_8_to_24
 import queue
 import threading
@@ -16,7 +17,7 @@ from digicomm import *
 # from detection_skeleton import pam_detect
 from common import *
 
-sdr_rx = adi.Pluto("usb:1.1.5")
+sdr_rx = adi.Pluto(os.environ.get("COSMOS_RX_URI", "usb:1.1.5"))
 rx = PlutoReceiver()
 rx.set_sdr(sdr_rx)
 rx.set_buffer_size(2e6)
@@ -52,6 +53,7 @@ def qam_symbols_to_bits(symbols, M):
 
 should_stop_event = threading.Event()
 image_queue = queue.Queue()
+constellation_queue = queue.Queue(maxsize=1)
 
 
 previous_transmission_times = []
@@ -74,29 +76,10 @@ def recieve_worker():
             #
             constellation = get_qam_constellation(M)
             rx_symbols = rx.receive()
-            axis[1].clear()
-            axis[1].scatter(
-                np.real(rx_symbols),
-                np.imag(rx_symbols),
-                alpha=0.3,
-                label="Received",
-            )
-
-            axis[1].scatter(
-                np.real(constellation),
-                np.imag(constellation),
-                color="red",
-                marker="x",
-                label="Ideal",
-            )
-
-            axis[1].set_aspect("equal", adjustable="box")
-            axis[1].set_title(f"{M}-QAM constellation")
-            axis[1].grid(True)
-            axis[1].legend()
-
-            figure.canvas.draw_idle()
-            # plt.pause(0.01)
+            try:
+                constellation_queue.put_nowait(rx_symbols)
+            except queue.Full:
+                pass
             bits = qam_symbols_to_bits(rx_symbols, M)
             payload = bits_to_bytes(bits)
             # try:
@@ -143,6 +126,34 @@ reciever_thread = threading.Thread(target=recieve_worker, daemon=True)
 reciever_thread.start()
 # recieve_worker()
 while plt.fignum_exists(figure.number):
+    try:
+        rx_symbols = constellation_queue.get_nowait()
+    except queue.Empty:
+        pass
+    else:
+        constellation = get_qam_constellation(M)
+        axis[1].clear()
+        axis[1].scatter(
+            np.real(rx_symbols),
+            np.imag(rx_symbols),
+            alpha=0.3,
+            label="Received",
+        )
+
+        axis[1].scatter(
+            np.real(constellation),
+            np.imag(constellation),
+            color="red",
+            marker="x",
+            label="Ideal",
+        )
+
+        axis[1].set_aspect("equal", adjustable="box")
+        axis[1].set_title(f"{M}-QAM constellation")
+        axis[1].grid(True)
+        axis[1].legend()
+
+        figure.canvas.draw_idle()
     image = None
 
     try:

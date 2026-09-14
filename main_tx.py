@@ -1,3 +1,4 @@
+import os
 from compression import compress_24_to_8
 import imageio.v3 as iio
 import numpy as np
@@ -25,7 +26,7 @@ dir_plots = 'plots/'
 # ---------------------------------------------------------------
 # Setup.
 # --------------------------------------3-------------------------
-sdr_tx = adi.Pluto("usb:0.1.5")
+sdr_tx = adi.Pluto(os.environ.get("COSMOS_TX_URI", "usb:0.1.5"))
 
 tx = PlutoTransmitter()
 tx.set_sdr(sdr_tx)
@@ -40,7 +41,7 @@ tx.set_power_level(90)
 # ---------------------------------------------------------------
 accumulated_frames = []
 
-for frame in iio.imiter('<video0>'):
+for frame in iio.imiter('<video' + os.environ.get('COSMOS_CAMERA', '0') + '>', plugin='FFMPEG'):
     new_image = Image.fromarray(frame).resize((width,height)).convert("RGB")
     print(new_image)
     if compression:

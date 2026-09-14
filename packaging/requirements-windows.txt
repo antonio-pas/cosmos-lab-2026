@@ -1,0 +1,10 @@
+numpy<3
+scipy<2
+matplotlib<4
+Pillow<13
+imageio<3
+imageio-ffmpeg<1
+pyadi-iio<1
+pylibiio<1
+reedsolo<2
+pyinstaller>=6.11,<7
